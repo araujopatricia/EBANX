@@ -10,6 +10,8 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Necessário para o SonarQube ver o histórico completo
     
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -18,7 +20,28 @@ jobs:
         distribution: 'temurin'
         cache: maven
     
-    - name: Build with Maven
+    - name: Cache SonarQube packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.sonar/cache
+        key: ${{ runner.os }}-sonar
+        restore-keys: ${{ runner.os }}-sonar
+    
+    - name: Build and analyze with Maven
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Necessário para PR decoration
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}    # Token de autenticação SonarQube
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }} # URL do servidor SonarQube
       run: |
         cd techtest
-        mvn clean install
+        mvn clean verify sonar:sonar -Dsonar.projectKey=ebanx-techtest
+
+    - name: Check Quality Gate
+      uses: sonarsource/sonarqube-quality-gate-action@master
+      timeout-minutes: 5
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      # Força o workflow a falhar se o Quality Gate falhar
+      with:
+        scanMetadataReportFile: techtest/target/sonar/report-task.txt
